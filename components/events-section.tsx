@@ -29,7 +29,8 @@ type Event = {
   category: string
   date: string
   location: string
-  image: string
+  image_url: string
+  source_url: string
   period: string
   vibes: string[]
 }
@@ -38,7 +39,7 @@ export function EventsSection() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTimeFilter, setActiveTimeFilter] = useState<TimeFilter>("weekend")
+  const [activeTimeFilter, setActiveTimeFilter] = useState<TimeFilter>("month")
   const [activeVibes, setActiveVibes] = useState<VibeFilter[]>([])
 
   useEffect(() => {
@@ -60,7 +61,8 @@ export function EventsSection() {
           category: row.category,
           date: row.date,
           location: row.location,
-          image: row.image,
+          image_url: row.image_url ?? row.image ?? "",
+          source_url: row.source_url ?? "",
           period: row.period,
           vibes: row.vibes ?? [],
         }))

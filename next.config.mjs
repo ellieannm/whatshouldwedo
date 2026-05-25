@@ -6,7 +6,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
     remotePatterns: [
-      // Eventbrite CDN
       {
         protocol: "https",
         hostname: "img.evbuc.com",
@@ -19,12 +18,6 @@ const nextConfig = {
       },
       {
         protocol: "https",
-        hostname: "**.evbuc.com",
-        pathname: "/**",
-      },
-      // Eventbrite (apex + subdomains, e.g. www.eventbrite.com.au)
-      {
-        protocol: "https",
         hostname: "eventbrite.com",
         pathname: "/**",
       },
@@ -35,15 +28,24 @@ const nextConfig = {
       },
       {
         protocol: "https",
-        hostname: "**.eventbrite.com.au",
+        hostname: "eventbritecdn.com",
         pathname: "/**",
       },
       {
         protocol: "https",
-        hostname: "**.eventbrite.co.uk",
+        hostname: "**.eventbritecdn.com",
         pathname: "/**",
       },
-      // Catch-all for other image hosts (e.g. Unsplash, future CDNs)
+      {
+        protocol: "https",
+        hostname: "secure.meetupstatic.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "images.squarespace-cdn.com",
+        pathname: "/**",
+      },
       {
         protocol: "https",
         hostname: "**",
