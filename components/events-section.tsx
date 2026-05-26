@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { EventCard } from "./event-card"
+import { eventMatchesTimeFilter, formatEventDisplayDate } from "@/lib/melbourne-dates"
 import { supabase } from "@/lib/supabase"
 
 const vibeFilters = [
@@ -31,7 +32,7 @@ type Event = {
   location: string
   image_url: string
   source_url: string
-  period: string
+  start_datetime: string
   vibes: string[]
 }
 
@@ -59,12 +60,12 @@ export function EventsSection() {
           id: String(row.id),
           title: row.title,
           category: row.category,
-          date: row.date,
-          location: row.location,
-          image_url: row.image_url ?? row.image ?? "",
+          start_datetime: row.start_datetime ?? "",
+          date: formatEventDisplayDate(String(row.start_datetime ?? "")),
+          location: row.venue_suburb ?? row.venue_name ?? "",
+          image_url: row.image_url ?? "",
           source_url: row.source_url ?? "",
-          period: row.period,
-          vibes: row.vibes ?? [],
+          vibes: row.vibe ? [row.vibe] : [],
         }))
       )
       setLoading(false)
@@ -80,18 +81,10 @@ export function EventsSection() {
   }
 
   const filteredEvents = events.filter((event) => {
-    let passesTimeFilter = false
-    if (activeTimeFilter === "week") {
-      passesTimeFilter =
-        event.period === "week" ||
-        event.period === "weekend" ||
-        event.period === "spontaneous"
-    } else if (activeTimeFilter === "weekend") {
-      passesTimeFilter =
-        event.period === "weekend" || event.period === "spontaneous"
-    } else {
-      passesTimeFilter = true
-    }
+    const passesTimeFilter = eventMatchesTimeFilter(
+      event.start_datetime,
+      activeTimeFilter
+    )
 
     const passesVibeFilter =
       activeVibes.length === 0 ||

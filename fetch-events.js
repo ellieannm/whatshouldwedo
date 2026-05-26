@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 
 /**
- * Fetches upcoming Melbourne events from the Eventbrite API and writes melbourne-events.csv
+ * Fetches upcoming Melbourne events from the Eventbrite API and inserts them into Supabase.
  *
  * Usage:
  *   node fetch-events.js
  *   MAX_EVENTS=1000 node fetch-events.js
  *
- * Set EVENTBRITE_API_KEY in .env.local or your shell environment.
+ * Set EVENTBRITE_API_KEY, NEXT_PUBLIC_SUPABASE_URL, and NEXT_PUBLIC_SUPABASE_ANON_KEY
+ * in .env.local or your shell environment.
  */
 
 const fs = require("fs")
 const path = require("path")
+const { createSupabaseClient } = require("./lib/supabase-client.js")
 
 function loadEnvLocal() {
   const envPath = path.join(__dirname, ".env.local")
@@ -36,6 +38,14 @@ function loadEnvLocal() {
 
 loadEnvLocal()
 
+let supabase
+try {
+  supabase = createSupabaseClient()
+} catch (error) {
+  console.error(error.message)
+  process.exit(1)
+}
+
 const API_KEY = process.env.EVENTBRITE_API_KEY
 if (!API_KEY) {
   console.error(
@@ -46,29 +56,12 @@ if (!API_KEY) {
 
 const API_BASE = "https://www.eventbriteapi.com/v3"
 const MELBOURNE_PLACE_ID = "101933229"
-const OUTPUT_FILE = path.join(__dirname, "melbourne-events.csv")
 const PAGE_SIZE = Number(process.env.PAGE_SIZE) || 50
 const MAX_FETCH = process.env.MAX_EVENTS ? Number(process.env.MAX_EVENTS) : 1000
 const DETAIL_DELAY_MS = Number(process.env.DETAIL_DELAY_MS) || 100
 const MIN_FREE_DURATION_MINUTES = 30
 const MAX_EVENT_DAYS_AHEAD = 30
 const MELBOURNE_TZ = "Australia/Melbourne"
-
-const CSV_HEADERS = [
-  "title",
-  "description",
-  "start_datetime",
-  "end_datetime",
-  "venue_name",
-  "venue_suburb",
-  "category",
-  "vibe",
-  "price_range",
-  "image_url",
-  "source_url",
-  "is_featured",
-  "is_curated_pick",
-]
 
 const ALLOWED_CATEGORY_MATCHERS = [
   (name) => name === "music" || name.startsWith("music "),
@@ -89,7 +82,10 @@ const EXCLUDED_KEYWORDS = [
   "80s",
   "90s",
   "decades of dance",
+  "decade",
   "nostalgia",
+  "end of semester",
+  "wholefoods",
   "throwback",
   "classic hits",
   "greatest hits",
@@ -592,45 +588,53 @@ function getPriceRange(event) {
   return "Paid"
 }
 
-function mapEventToRow(event, { isFeatured = false } = {}) {
+function mapEventToDbRecord(event, { isFeatured = false } = {}) {
   const description = getEventDescription(event)
   const venue = event.venue
   const venueSuburb =
     venue?.address?.city ||
     venue?.address?.localized_area_display?.split(",")?.[0]?.trim() ||
     ""
+  const vibe = inferVibe(event)
+  const startDatetime = formatDatetime(event.start)
 
   return {
     title: getEventTitle(event),
     description,
-    start_datetime: formatDatetime(event.start),
+    start_datetime: startDatetime,
     end_datetime: formatDatetime(event.end),
     venue_name: venue?.name || "",
     venue_suburb: venueSuburb,
     category: getEventCategory(event),
-    vibe: inferVibe(event),
+    vibe,
     price_range: getPriceRange(event),
     image_url: getEventImageUrl(event),
     source_url: event.url || "",
-    is_featured: isFeatured ? "true" : "false",
-    is_curated_pick: "false",
+    is_featured: isFeatured,
+    is_curated_pick: false,
   }
 }
 
-function csvEscape(value) {
-  const str = value == null ? "" : String(value)
-  if (/[",\n\r]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`
+async function sourceUrlExists(sourceUrl) {
+  const { data, error } = await supabase
+    .from("events")
+    .select("id")
+    .eq("source_url", sourceUrl)
+    .limit(1)
+
+  if (error) {
+    throw new Error(`Duplicate check failed: ${error.message}`)
   }
-  return str
+
+  return (data?.length ?? 0) > 0
 }
 
-function rowsToCsv(rows) {
-  const lines = [CSV_HEADERS.join(",")]
-  for (const row of rows) {
-    lines.push(CSV_HEADERS.map((header) => csvEscape(row[header])).join(","))
+async function insertEvent(record) {
+  const { error } = await supabase.from("events").insert(record)
+
+  if (error) {
+    throw new Error(error.message)
   }
-  return lines.join("\n") + "\n"
 }
 
 function sleep(ms) {
@@ -647,15 +651,16 @@ async function main() {
 
   if (eventIds.length === 0) {
     console.log("No events found.")
-    fs.writeFileSync(OUTPUT_FILE, rowsToCsv([]))
     return
   }
 
   console.log(`Fetching details for ${eventIds.length} events…`)
 
-  const rows = []
   let excludedCount = 0
+  let duplicateCount = 0
+  let insertedCount = 0
   let featuredCount = 0
+  let errorCount = 0
 
   for (let i = 0; i < eventIds.length; i++) {
     const eventId = eventIds[i]
@@ -670,15 +675,36 @@ async function main() {
         continue
       }
 
-      const isFeatured = isFeaturedEvent(event)
-      if (isFeatured) featuredCount++
+      const record = mapEventToDbRecord(event, {
+        isFeatured: isFeaturedEvent(event),
+      })
 
-      rows.push(mapEventToRow(event, { isFeatured }))
-      const featuredTag = isFeatured ? " [featured]" : ""
+      if (!record.source_url) {
+        excludedCount++
+        console.log(
+          `  [${i + 1}/${eventIds.length}] skipped: ${record.title} (no source_url)`
+        )
+        continue
+      }
+
+      if (await sourceUrlExists(record.source_url)) {
+        duplicateCount++
+        console.log(
+          `  [${i + 1}/${eventIds.length}] duplicate: ${record.title}`
+        )
+        continue
+      }
+
+      await insertEvent(record)
+      insertedCount++
+      if (record.is_featured) featuredCount++
+
+      const featuredTag = record.is_featured ? " [featured]" : ""
       console.log(
-        `  [${i + 1}/${eventIds.length}] ${rows[rows.length - 1].title}${featuredTag}`
+        `  [${i + 1}/${eventIds.length}] inserted: ${record.title}${featuredTag}`
       )
     } catch (error) {
+      errorCount++
       console.warn(`  Skipping event ${eventId}: ${error.message}`)
     }
 
@@ -687,9 +713,8 @@ async function main() {
     }
   }
 
-  fs.writeFileSync(OUTPUT_FILE, rowsToCsv(rows))
   console.log(
-    `\nWrote ${rows.length} events to ${OUTPUT_FILE} (${excludedCount} filtered out, ${featuredCount} featured)`
+    `\nDone: ${insertedCount} inserted, ${duplicateCount} duplicates skipped, ${excludedCount} filtered out, ${errorCount} errors (${featuredCount} featured)`
   )
 }
 
