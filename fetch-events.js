@@ -606,7 +606,7 @@ function mapEventToDbRecord(event, { isFeatured = false } = {}) {
     venue_name: venue?.name || "",
     venue_suburb: venueSuburb,
     category: getEventCategory(event),
-    vibe,
+    vibes: vibe ? [vibe] : [],
     price_range: getPriceRange(event),
     image_url: getEventImageUrl(event),
     source_url: event.url || "",

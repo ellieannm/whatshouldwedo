@@ -10,7 +10,6 @@ const vibeFilters = [
   { label: "Low key", value: "low-key", icon: "🌿" },
   { label: "High energy", value: "high-energy", icon: "⚡" },
   { label: "Free or cheap", value: "free-cheap", icon: "💸" },
-  { label: "Spontaneous", value: "spontaneous", icon: "🎲" },
   { label: "Solo-friendly", value: "solo", icon: "🧍" },
   { label: "Good for groups", value: "groups", icon: "👥" },
 ]
@@ -27,14 +26,34 @@ type VibeFilter = (typeof vibeFilters)[number]["value"]
 type Event = {
   id: string
   title: string
+  description: string
   category: string
   date: string
   location: string
+  venue_name: string
+  venue_suburb: string
   image_url: string
   source_url: string
   start_datetime: string
   end_datetime: string
   vibes: string[]
+}
+
+function eventMatchesSearch(event: Event, query: string) {
+  const trimmed = query.trim().toLowerCase()
+  if (!trimmed) return true
+
+  const haystack = [
+    event.title,
+    event.venue_name,
+    event.venue_suburb,
+    event.description,
+    event.location,
+  ]
+    .join(" ")
+    .toLowerCase()
+
+  return haystack.includes(trimmed)
 }
 
 export function EventsSection() {
@@ -43,6 +62,7 @@ export function EventsSection() {
   const [error, setError] = useState<string | null>(null)
   const [activeTimeFilter, setActiveTimeFilter] = useState<TimeFilter>("month")
   const [activeVibes, setActiveVibes] = useState<VibeFilter[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
     async function fetchEvents() {
@@ -59,15 +79,22 @@ export function EventsSection() {
       setEvents(
         (data ?? []).map((row) => ({
           id: String(row.id),
-          title: row.title,
+          title: row.title ?? "",
+          description: row.description ?? "",
           category: row.category,
           start_datetime: row.start_datetime ?? "",
           end_datetime: row.end_datetime ?? "",
           date: formatEventDisplayDate(String(row.start_datetime ?? "")),
+          venue_name: row.venue_name ?? "",
+          venue_suburb: row.venue_suburb ?? "",
           location: row.venue_suburb ?? row.venue_name ?? "",
           image_url: row.image_url ?? "",
           source_url: row.source_url ?? "",
-          vibes: row.vibe ? [row.vibe] : [],
+          vibes: Array.isArray(row.vibes)
+            ? (row.vibes as unknown[]).filter(
+                (v): v is string => typeof v === "string" && v.length > 0
+              )
+            : [],
         }))
       )
       setLoading(false)
@@ -122,6 +149,17 @@ export function EventsSection() {
 
       <div className="mb-12">
         <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground mb-4 font-medium">
+          Search
+        </p>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Title, venue, suburb, description…"
+          className="w-full max-w-xl px-3 py-2 mb-8 text-xs uppercase tracking-wide font-medium bg-transparent text-foreground border border-foreground/40 placeholder:text-muted-foreground placeholder:uppercase focus:outline-none focus:border-foreground rounded-none"
+        />
+
+        <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground mb-4 font-medium">
           Filter by vibe
         </p>
         <div className="flex flex-wrap gap-2">
@@ -172,6 +210,7 @@ export function EventsSection() {
               onClick={() => {
                 setActiveVibes([])
                 setActiveTimeFilter("month")
+                setSearchQuery("")
               }}
               className="text-primary underline underline-offset-4 hover:opacity-70 transition-opacity"
             >

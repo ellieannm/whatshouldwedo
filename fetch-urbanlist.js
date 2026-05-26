@@ -295,6 +295,125 @@ function isExternalUrl(href) {
   }
 }
 
+const VIBE_KEYWORDS = {
+  "late-night": [
+    "late night",
+    "late-night",
+    "after dark",
+    "midnight",
+    "nightlife",
+    "night club",
+    "nightclub",
+    "until late",
+    "after hours",
+    "10pm",
+    "11pm",
+    "12am",
+    "1am",
+    "2am",
+    "dj set",
+    "club night",
+    "evening show",
+  ],
+  "low-key": [
+    "low key",
+    "low-key",
+    "intimate",
+    "relaxed",
+    "chill",
+    "quiet",
+    "cosy",
+    "cozy",
+    "mellow",
+    "casual",
+    "unhurried",
+    "slow-paced",
+    "wine bar",
+    "supper club",
+  ],
+  "high-energy": [
+    "high energy",
+    "high-energy",
+    "festival",
+    "party",
+    "dance",
+    "rave",
+    "gig",
+    "live music",
+    "concert",
+    "club",
+    "energetic",
+    "marathon",
+    "race",
+    "bootscoot",
+    "racing",
+    "dj ",
+    "rave",
+  ],
+  "free-cheap": [
+    "free entry",
+    "entry is free",
+    "entry free",
+    "for free",
+    "no cover",
+    "complimentary",
+    "gold coin",
+    "by donation",
+    "cheap",
+    "affordable",
+    "budget",
+    "no ticket",
+    "free admission",
+    "attending is free",
+    "is free,",
+    "is free.",
+  ],
+  "solo-friendly": [
+    "solo",
+    "alone",
+    "by yourself",
+    "on your own",
+    "individual",
+    "museum",
+    "gallery",
+    "exhibition",
+    "art show",
+    "cinema",
+    "film screening",
+    "date night for one",
+  ],
+  groups: [
+    "group",
+    "groups",
+    "friends",
+    "family",
+    "families",
+    "team",
+    "long table",
+    "long-table",
+    "gathering",
+    "party of",
+    "together",
+    "corporate",
+    "good for groups",
+    "mates",
+    "crew",
+  ],
+}
+
+function inferVibes(title, description) {
+  const haystack = `${title} ${description}`.toLowerCase()
+  const vibes = []
+
+  for (const [vibe, keywords] of Object.entries(VIBE_KEYWORDS)) {
+    if (keywords.some((keyword) => haystack.includes(keyword))) {
+      vibes.push(vibe)
+    }
+  }
+
+  return vibes
+}
+
 function mapToDbRecord({
   title,
   description,
@@ -314,7 +433,7 @@ function mapToDbRecord({
     venue_name,
     venue_suburb,
     category: DEFAULT_CATEGORY,
-    vibe: "",
+    vibes: inferVibes(title, description || ""),
     price_range: "",
     image_url: cleanImageUrl(image_url),
     source_url,
