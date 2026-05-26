@@ -33,6 +33,7 @@ type Event = {
   image_url: string
   source_url: string
   start_datetime: string
+  end_datetime: string
   vibes: string[]
 }
 
@@ -61,6 +62,7 @@ export function EventsSection() {
           title: row.title,
           category: row.category,
           start_datetime: row.start_datetime ?? "",
+          end_datetime: row.end_datetime ?? "",
           date: formatEventDisplayDate(String(row.start_datetime ?? "")),
           location: row.venue_suburb ?? row.venue_name ?? "",
           image_url: row.image_url ?? "",
@@ -83,7 +85,8 @@ export function EventsSection() {
   const filteredEvents = events.filter((event) => {
     const passesTimeFilter = eventMatchesTimeFilter(
       event.start_datetime,
-      activeTimeFilter
+      activeTimeFilter,
+      event.end_datetime
     )
 
     const passesVibeFilter =

@@ -105,22 +105,26 @@ export function isDateKeyInRange(
 
 export function eventMatchesTimeFilter(
   startDatetime: string,
-  filter: "week" | "weekend" | "month"
+  filter: "week" | "weekend" | "month",
+  endDatetime?: string
 ): boolean {
   if (filter === "month") return true
 
   const start = parseUtcStartDatetime(startDatetime)
   if (!start) return false
 
-  const melbourneDateKey = toMelbourneDateKey(start)
+  const startKey = toMelbourneDateKey(start)
+
+  const end = endDatetime ? parseUtcStartDatetime(endDatetime) : null
+  const endKey = end ? toMelbourneDateKey(end) : startKey
 
   if (filter === "week") {
     const range = getThisWeekRangeMelbourne()
-    return isDateKeyInRange(melbourneDateKey, range.startKey, range.endKey)
+    return startKey <= range.endKey && endKey >= range.startKey
   }
 
   const range = getThisWeekendRangeMelbourne()
-  return isDateKeyInRange(melbourneDateKey, range.startKey, range.endKey)
+  return startKey <= range.endKey && endKey >= range.startKey
 }
 
 export function formatEventDisplayDate(startDatetime: string): string {
