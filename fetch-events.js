@@ -5,7 +5,7 @@
  *
  * Usage:
  *   node fetch-events.js
- *   MAX_EVENTS=500 node fetch-events.js
+ *   MAX_EVENTS=1000 node fetch-events.js
  *
  * Set EVENTBRITE_API_KEY in .env.local or your shell environment.
  */
@@ -48,9 +48,11 @@ const API_BASE = "https://www.eventbriteapi.com/v3"
 const MELBOURNE_PLACE_ID = "101933229"
 const OUTPUT_FILE = path.join(__dirname, "melbourne-events.csv")
 const PAGE_SIZE = Number(process.env.PAGE_SIZE) || 50
-const MAX_FETCH = process.env.MAX_EVENTS ? Number(process.env.MAX_EVENTS) : 500
+const MAX_FETCH = process.env.MAX_EVENTS ? Number(process.env.MAX_EVENTS) : 1000
 const DETAIL_DELAY_MS = Number(process.env.DETAIL_DELAY_MS) || 100
 const MIN_FREE_DURATION_MINUTES = 30
+const MAX_EVENT_DAYS_AHEAD = 30
+const MELBOURNE_TZ = "Australia/Melbourne"
 
 const CSV_HEADERS = [
   "title",
@@ -83,6 +85,14 @@ const ALLOWED_CATEGORY_MATCHERS = [
 
 const EXCLUDED_KEYWORDS = [
   "tribute",
+  "2000s",
+  "80s",
+  "90s",
+  "decades of dance",
+  "nostalgia",
+  "throwback",
+  "classic hits",
+  "greatest hits",
   "cover band",
   "school",
   "primary",
@@ -338,6 +348,42 @@ function getEventDurationMinutes(event) {
   return (end.getTime() - start.getTime()) / (1000 * 60)
 }
 
+function formatDateKeyInTimeZone(date, timeZone) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date)
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const [year, month, day] = dateKey.split("-").map(Number)
+  const date = new Date(year, month - 1, day)
+  date.setDate(date.getDate() + days)
+  return formatDateKeyInTimeZone(date, MELBOURNE_TZ)
+}
+
+function getEventStartDateKey(event) {
+  const local = event.start?.local
+  if (!local) return null
+  const match = local.match(/^(\d{4}-\d{2}-\d{2})/)
+  return match ? match[1] : null
+}
+
+function getDateWindowKeys() {
+  const todayKey = formatDateKeyInTimeZone(new Date(), MELBOURNE_TZ)
+  const maxKey = addDaysToDateKey(todayKey, MAX_EVENT_DAYS_AHEAD)
+  return { todayKey, maxKey }
+}
+
+function isWithinDateWindow(event) {
+  const startKey = getEventStartDateKey(event)
+  if (!startKey) return false
+  const { todayKey, maxKey } = getDateWindowKeys()
+  return startKey >= todayKey && startKey <= maxKey
+}
+
 function stripHtml(html) {
   if (!html) return ""
   return html
@@ -496,6 +542,11 @@ function getExclusionReason(event) {
   if (!isAllowedCategory(category)) {
     return `category not allowed: ${category || "(none)"}`
   }
+  if (!isWithinDateWindow(event)) {
+    const startKey = getEventStartDateKey(event)
+    const { todayKey, maxKey } = getDateWindowKeys()
+    return `outside date window (${startKey || "unknown"}; allowed ${todayKey}–${maxKey})`
+  }
   if (!hasEventImage(event)) {
     return "no image"
   }
@@ -587,6 +638,11 @@ function sleep(ms) {
 }
 
 async function main() {
+  const { todayKey, maxKey } = getDateWindowKeys()
+  console.log(
+    `Date filter: start dates from ${todayKey} through ${maxKey} (Melbourne)`
+  )
+
   const eventIds = await searchEventIds()
 
   if (eventIds.length === 0) {
