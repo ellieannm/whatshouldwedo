@@ -33,7 +33,7 @@ export function Header() {
           <Link href="#" className={navLinkClass}>
             Venues
           </Link>
-          <Link href="#" className={navLinkClass}>
+          <Link href="/submit" className={navLinkClass}>
             Submit
           </Link>
         </nav>
@@ -52,7 +52,7 @@ export function Header() {
         <nav className="lg:hidden border-t border-foreground/10 bg-background px-6 py-6">
           <div className="flex flex-col gap-5">
             <Link
-              href="#"
+              href="/submit"
               className="text-sm uppercase tracking-[0.15em] text-primary font-medium"
               onClick={() => setIsMenuOpen(false)}
             >

@@ -69,6 +69,7 @@ export function EventsSection() {
       const { data, error: fetchError } = await supabase
         .from("events")
         .select("*")
+        .or("status.eq.approved,status.is.null")
 
       if (fetchError) {
         setError(fetchError.message)

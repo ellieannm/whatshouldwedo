@@ -112,8 +112,13 @@ const EXCLUDED_KEYWORDS = [
   "certificate",
   "certification",
   "training",
+  "underage",
+  "violence",
+  "exam",
   "marketing",
   "sales",
+  "finance",
+  "financial",
   "fighting",
   "mma",
   "boxing",
@@ -125,6 +130,8 @@ const EXCLUDED_KEYWORDS = [
   "mosque",
   "temple",
   "parish",
+  "zion",
+  "israel",
   "fundraiser",
   "charity gala",
   "kids",
@@ -136,6 +143,8 @@ const EXCLUDED_KEYWORDS = [
   "therapy",
   "government",
   "council",
+  "afro",
+  "bollywood",
 ]
 
 const FEATURED_VENUES = [
