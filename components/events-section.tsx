@@ -12,15 +12,18 @@ const vibeFilters = [
   { label: "Free or cheap", value: "free-cheap", icon: "💸" },
   { label: "Solo-friendly", value: "solo", icon: "🧍" },
   { label: "Good for groups", value: "groups", icon: "👥" },
+  { label: "Date night", value: "date-night", icon: "🌹" },
 ]
 
 const timeFilters = [
+  { label: "Today", value: "today" },
   { label: "This Week", value: "week" },
   { label: "Weekend", value: "weekend" },
   { label: "This Month", value: "month" },
+  { label: "Pick a Date", value: "date" },
 ]
 
-type TimeFilter = "week" | "weekend" | "month"
+type TimeFilter = "today" | "week" | "weekend" | "month" | "date"
 type VibeFilter = (typeof vibeFilters)[number]["value"]
 
 type Event = {
@@ -61,6 +64,7 @@ export function EventsSection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTimeFilter, setActiveTimeFilter] = useState<TimeFilter>("month")
+  const [pickedDate, setPickedDate] = useState("")
   const [activeVibes, setActiveVibes] = useState<VibeFilter[]>([])
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -111,17 +115,23 @@ export function EventsSection() {
   }
 
   const filteredEvents = events.filter((event) => {
-    const passesTimeFilter = eventMatchesTimeFilter(
-      event.start_datetime,
-      activeTimeFilter,
-      event.end_datetime
-    )
+    const passesTimeFilter =
+      activeTimeFilter === "date" && !pickedDate
+        ? true
+        : eventMatchesTimeFilter(
+            event.start_datetime,
+            activeTimeFilter,
+            event.end_datetime,
+            activeTimeFilter === "date" ? pickedDate : undefined
+          )
 
     const passesVibeFilter =
       activeVibes.length === 0 ||
       activeVibes.some((vibe) => event.vibes.includes(vibe))
 
-    return passesTimeFilter && passesVibeFilter
+    const passesSearch = eventMatchesSearch(event, searchQuery)
+
+    return passesTimeFilter && passesVibeFilter && passesSearch
   })
 
   return (
@@ -131,20 +141,30 @@ export function EventsSection() {
           What&apos;s On
         </h2>
 
-        <div className="flex gap-2">
-          {timeFilters.map((filter) => (
-            <button
-              key={filter.value}
-              onClick={() => setActiveTimeFilter(filter.value as TimeFilter)}
-              className={`px-4 py-2 text-xs uppercase tracking-widest font-medium transition-colors ${
-                activeTimeFilter === filter.value
-                  ? "bg-primary text-[#e5e7d4]"
-                  : "bg-transparent text-foreground border border-foreground hover:bg-foreground hover:text-background"
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
+        <div className="flex flex-col items-start gap-3">
+          <div className="flex flex-wrap gap-2">
+            {timeFilters.map((filter) => (
+              <button
+                key={filter.value}
+                onClick={() => setActiveTimeFilter(filter.value as TimeFilter)}
+                className={`px-4 py-2 text-xs uppercase tracking-widest font-medium transition-colors ${
+                  activeTimeFilter === filter.value
+                    ? "bg-primary text-[#e5e7d4]"
+                    : "bg-transparent text-foreground border border-foreground hover:bg-foreground hover:text-background"
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+          {activeTimeFilter === "date" ? (
+            <input
+              type="date"
+              value={pickedDate}
+              onChange={(e) => setPickedDate(e.target.value)}
+              className="px-3 py-2 text-xs uppercase tracking-wide font-medium bg-transparent text-foreground border border-foreground/40 focus:outline-none focus:border-foreground rounded-none"
+            />
+          ) : null}
         </div>
       </div>
 
@@ -211,6 +231,7 @@ export function EventsSection() {
               onClick={() => {
                 setActiveVibes([])
                 setActiveTimeFilter("month")
+                setPickedDate("")
                 setSearchQuery("")
               }}
               className="text-primary underline underline-offset-4 hover:opacity-70 transition-opacity"

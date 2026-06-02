@@ -105,8 +105,9 @@ export function isDateKeyInRange(
 
 export function eventMatchesTimeFilter(
   startDatetime: string,
-  filter: "week" | "weekend" | "month",
-  endDatetime?: string
+  filter: "today" | "week" | "weekend" | "month" | "date",
+  endDatetime?: string,
+  pickedDateKey?: string
 ): boolean {
   if (filter === "month") return true
 
@@ -117,6 +118,16 @@ export function eventMatchesTimeFilter(
 
   const end = endDatetime ? parseUtcStartDatetime(endDatetime) : null
   const endKey = end ? toMelbourneDateKey(end) : startKey
+
+  if (filter === "today") {
+    const todayKey = toMelbourneDateKey(new Date())
+    return isDateKeyInRange(todayKey, startKey, endKey)
+  }
+
+  if (filter === "date") {
+    if (!pickedDateKey) return false
+    return isDateKeyInRange(pickedDateKey, startKey, endKey)
+  }
 
   if (filter === "week") {
     const range = getThisWeekRangeMelbourne()
