@@ -1,4 +1,4 @@
-const MELBOURNE_TZ = "Australia/Melbourne"
+export const MELBOURNE_TZ = "Australia/Melbourne"
 
 /** Parse Supabase / CSV start time stored as UTC (no offset suffix). */
 export function parseUtcStartDatetime(value: string): Date | null {

@@ -20,6 +20,7 @@ type AdminEvent = {
   source_url: string
   vibes: string[]
   status: string | null
+  is_curated_pick: boolean
 }
 
 const statusFilters: { label: string; value: FilterStatus }[] = [
@@ -73,6 +74,9 @@ export default function AdminPage() {
   const [updatingEventId, setUpdatingEventId] = useState<string | null>(null)
   const [editingVibesEventId, setEditingVibesEventId] = useState<string | null>(null)
   const [updatingVibesEventId, setUpdatingVibesEventId] = useState<string | null>(null)
+  const [updatingCuratedPickEventId, setUpdatingCuratedPickEventId] = useState<string | null>(
+    null
+  )
 
   useEffect(() => {
     const stored = window.localStorage.getItem(ADMIN_AUTH_KEY)
@@ -92,7 +96,7 @@ export default function AdminPage() {
       const { data, error: fetchError } = await supabase
         .from("events")
         .select(
-          "id,title,start_datetime,venue_name,venue_suburb,image_url,source_name,source_url,vibes,status"
+          "id,title,start_datetime,venue_name,venue_suburb,image_url,source_name,source_url,vibes,status,is_curated_pick"
         )
         .order("start_datetime", { ascending: true })
 
@@ -118,6 +122,7 @@ export default function AdminPage() {
               )
             : [],
           status: row.status ?? null,
+          is_curated_pick: row.is_curated_pick === true,
         }))
       )
       setLoading(false)
@@ -200,6 +205,43 @@ export default function AdminPage() {
     }
 
     setUpdatingVibesEventId(null)
+  }
+
+  const setCuratedPick = async (eventId: string) => {
+    setUpdatingCuratedPickEventId(eventId)
+    setError(null)
+
+    const previousEvents = events
+    setEvents((current) =>
+      current.map((event) => ({
+        ...event,
+        is_curated_pick: event.id === eventId,
+      }))
+    )
+
+    const { error: clearError } = await supabase
+      .from("events")
+      .update({ is_curated_pick: false })
+      .eq("is_curated_pick", true)
+
+    if (clearError) {
+      setEvents(previousEvents)
+      setError(clearError.message)
+      setUpdatingCuratedPickEventId(null)
+      return
+    }
+
+    const { error: pickError } = await supabase
+      .from("events")
+      .update({ is_curated_pick: true })
+      .eq("id", eventId)
+
+    if (pickError) {
+      setEvents(previousEvents)
+      setError(pickError.message)
+    }
+
+    setUpdatingCuratedPickEventId(null)
   }
 
   if (!isAuthed) {
@@ -322,9 +364,16 @@ export default function AdminPage() {
                   const isUpdating = updatingEventId === event.id
                   const isEditingVibes = editingVibesEventId === event.id
                   const isUpdatingVibes = updatingVibesEventId === event.id
+                  const isUpdatingCuratedPick = updatingCuratedPickEventId === event.id
+                  const isCuratedPick = event.is_curated_pick
 
                   return (
-                    <tr key={event.id} className="border-b border-foreground/40 align-top">
+                    <tr
+                      key={event.id}
+                      className={`border-b border-foreground/40 align-top ${
+                        isCuratedPick ? "bg-[#d4a017]/10" : ""
+                      }`}
+                    >
                       <td className="px-3 py-3">
                         {event.image_url ? (
                           <img
@@ -341,7 +390,12 @@ export default function AdminPage() {
                         )}
                       </td>
                       <td className="px-3 py-3 text-sm font-medium uppercase tracking-wide">
-                        {event.title}
+                        <div>{event.title}</div>
+                        {isCuratedPick ? (
+                          <span className="mt-1 inline-block text-[10px] font-semibold uppercase tracking-[0.15em] text-[#b8860b]">
+                            ★ Curated Pick
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-3 py-3 text-xs uppercase tracking-wide text-muted-foreground">
                         {formatStartDate(event.start_datetime)}
@@ -408,22 +462,32 @@ export default function AdminPage() {
                         {displayStatus}
                       </td>
                       <td className="px-3 py-3">
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-2">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => updateEventStatus(event.id, "approved")}
+                              disabled={isUpdating}
+                              className="border border-[#2e7d32] bg-[#2e7d32] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white disabled:opacity-60"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateEventStatus(event.id, "rejected")}
+                              disabled={isUpdating}
+                              className="border border-primary bg-primary px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-primary-foreground disabled:opacity-60"
+                            >
+                              Reject
+                            </button>
+                          </div>
                           <button
                             type="button"
-                            onClick={() => updateEventStatus(event.id, "approved")}
-                            disabled={isUpdating}
-                            className="border border-[#2e7d32] bg-[#2e7d32] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white disabled:opacity-60"
+                            onClick={() => setCuratedPick(event.id)}
+                            disabled={isCuratedPick || isUpdatingCuratedPick}
+                            className="w-fit border border-[#b8860b] bg-[#d4a017] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#1a1a1a] disabled:opacity-60"
                           >
-                            Approve
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => updateEventStatus(event.id, "rejected")}
-                            disabled={isUpdating}
-                            className="border border-primary bg-primary px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-primary-foreground disabled:opacity-60"
-                          >
-                            Reject
+                            {isCuratedPick ? "Curated Pick" : "Set as Curated Pick"}
                           </button>
                         </div>
                       </td>
