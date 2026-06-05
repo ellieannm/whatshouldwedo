@@ -162,14 +162,31 @@ export default function AdminPage() {
       current.map((event) => (event.id === eventId ? { ...event, status } : event))
     )
 
-    const { error: updateError } = await supabase
-      .from("events")
-      .update({ status })
-      .eq("id", eventId)
+    const response = await fetch("/api/admin/update-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId, status }),
+    })
 
-    if (updateError) {
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string
+      status?: string
+    }
+
+    console.log("[admin] update-status response", {
+      eventId,
+      status,
+      ok: response.ok,
+      statusCode: response.status,
+      payload,
+    })
+
+    if (!response.ok) {
       setEvents(previousEvents)
-      setError(updateError.message)
+      setError(payload.error || "Could not update status")
+      console.error("[admin] update-status failed", payload.error || response.statusText)
+    } else {
+      console.log("[admin] update-status succeeded", payload)
     }
 
     setUpdatingEventId(null)

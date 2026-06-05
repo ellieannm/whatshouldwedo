@@ -137,3 +137,17 @@
 .animate-scroll {
   animation: scroll 15s linear infinite;
 }
+
+.event-card-votes {
+  display: flex;
+  visibility: visible;
+  opacity: 1;
+  min-height: 3rem;
+  pointer-events: auto;
+}
+
+.event-card-vote-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}

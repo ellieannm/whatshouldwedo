@@ -138,14 +138,57 @@ export function eventMatchesTimeFilter(
   return startKey <= range.endKey && endKey >= range.startKey
 }
 
+function formatDayMonth(date: Date, includeYear = false): string {
+  const formatted = new Intl.DateTimeFormat("en-AU", {
+    timeZone: MELBOURNE_TZ,
+    day: "numeric",
+    month: "short",
+    ...(includeYear ? { year: "numeric" } : {}),
+  }).format(date)
+
+  return formatted.toUpperCase()
+}
+
+function formatSingleEventDay(date: Date): string {
+  const weekday = new Intl.DateTimeFormat("en-AU", {
+    timeZone: MELBOURNE_TZ,
+    weekday: "short",
+  })
+    .format(date)
+    .toUpperCase()
+
+  return `${weekday}, ${formatDayMonth(date)}`
+}
+
 export function formatEventDisplayDate(startDatetime: string): string {
   const start = parseUtcStartDatetime(startDatetime)
   if (!start) return ""
 
-  return new Intl.DateTimeFormat("en-AU", {
+  return formatSingleEventDay(start)
+}
+
+export function formatEventDateRange(startDatetime: string, endDatetime?: string): string {
+  const start = parseUtcStartDatetime(startDatetime)
+  if (!start) return ""
+
+  const end = endDatetime ? parseUtcStartDatetime(endDatetime) : null
+  const startKey = toMelbourneDateKey(start)
+  const endKey = end ? toMelbourneDateKey(end) : startKey
+
+  if (!end || startKey === endKey) {
+    return formatSingleEventDay(start)
+  }
+
+  const startYear = new Intl.DateTimeFormat("en-AU", {
     timeZone: MELBOURNE_TZ,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
+    year: "numeric",
   }).format(start)
+
+  const endYear = new Intl.DateTimeFormat("en-AU", {
+    timeZone: MELBOURNE_TZ,
+    year: "numeric",
+  }).format(end)
+
+  const includeYear = startYear !== endYear
+  return `${formatDayMonth(start, includeYear)} — ${formatDayMonth(end, includeYear)}`
 }

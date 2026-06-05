@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { EventCard } from "./event-card"
-import { eventMatchesTimeFilter, formatEventDisplayDate } from "@/lib/melbourne-dates"
+import {
+  eventMatchesTimeFilter,
+  formatEventDateRange,
+} from "@/lib/melbourne-dates"
 import { supabase } from "@/lib/supabase"
 
 const vibeFilters = [
@@ -40,6 +43,56 @@ type Event = {
   start_datetime: string
   end_datetime: string
   vibes: string[]
+  votes: number
+  vibe_description: string
+}
+
+async function generateVibeDescription(event: Event): Promise<string | null> {
+  const response = await fetch("/api/generate-vibe-description", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      category: event.category,
+      venue_name: event.venue_name,
+      venue_suburb: event.venue_suburb,
+      vibes: event.vibes,
+    }),
+  })
+
+  if (!response.ok) return null
+
+  const payload = (await response.json()) as { description?: string }
+  return payload.description?.trim() || null
+}
+
+function mapRowToEvent(row: Record<string, unknown>): Event {
+  return {
+    id: String(row.id),
+    title: (row.title as string) ?? "",
+    description: (row.description as string) ?? "",
+    category: (row.category as string) ?? "",
+    start_datetime: (row.start_datetime as string) ?? "",
+    end_datetime: (row.end_datetime as string) ?? "",
+          date: formatEventDateRange(
+            String(row.start_datetime ?? ""),
+            String(row.end_datetime ?? "")
+          ),
+    venue_name: (row.venue_name as string) ?? "",
+    venue_suburb: (row.venue_suburb as string) ?? "",
+    location: (row.venue_suburb as string) ?? (row.venue_name as string) ?? "",
+    image_url: (row.image_url as string) ?? "",
+    source_url: (row.source_url as string) ?? "",
+    vibes: Array.isArray(row.vibes)
+      ? (row.vibes as unknown[]).filter(
+          (v): v is string => typeof v === "string" && v.length > 0
+        )
+      : [],
+    votes: Number(row.votes) || 0,
+    vibe_description: (row.vibe_description as string) ?? "",
+  }
 }
 
 function eventMatchesSearch(event: Event, query: string) {
@@ -72,7 +125,9 @@ export function EventsSection() {
     async function fetchEvents() {
       const { data, error: fetchError } = await supabase
         .from("events")
-        .select("*")
+        .select(
+          "id,title,description,category,start_datetime,end_datetime,venue_name,venue_suburb,image_url,source_url,vibes,votes,vibe_description,status"
+        )
         .or("status.eq.approved,status.is.null")
 
       if (fetchError) {
@@ -81,32 +136,33 @@ export function EventsSection() {
         return
       }
 
-      setEvents(
-        (data ?? []).map((row) => ({
-          id: String(row.id),
-          title: row.title ?? "",
-          description: row.description ?? "",
-          category: row.category,
-          start_datetime: row.start_datetime ?? "",
-          end_datetime: row.end_datetime ?? "",
-          date: formatEventDisplayDate(String(row.start_datetime ?? "")),
-          venue_name: row.venue_name ?? "",
-          venue_suburb: row.venue_suburb ?? "",
-          location: row.venue_suburb ?? row.venue_name ?? "",
-          image_url: row.image_url ?? "",
-          source_url: row.source_url ?? "",
-          vibes: Array.isArray(row.vibes)
-            ? (row.vibes as unknown[]).filter(
-                (v): v is string => typeof v === "string" && v.length > 0
-              )
-            : [],
-        }))
-      )
+      const mapped = (data ?? []).map((row) => mapRowToEvent(row))
+      setEvents(mapped)
       setLoading(false)
+
+      const missingVibeDescription = mapped.filter((event) => !event.vibe_description.trim())
+      for (const event of missingVibeDescription) {
+        const description = await generateVibeDescription(event)
+        if (!description) continue
+
+        setEvents((current) =>
+          current.map((item) =>
+            item.id === event.id ? { ...item, vibe_description: description } : item
+          )
+        )
+      }
     }
 
     fetchEvents()
   }, [])
+
+  const handleVotesChange = (eventId: string, newVotes: number) => {
+    setEvents((current) =>
+      current.map((event) =>
+        event.id === eventId ? { ...event, votes: newVotes } : event
+      )
+    )
+  }
 
   const toggleVibe = (vibe: VibeFilter) => {
     setActiveVibes((prev) =>
@@ -133,6 +189,8 @@ export function EventsSection() {
 
     return passesTimeFilter && passesVibeFilter && passesSearch
   })
+
+  const sortedEvents = [...filteredEvents].sort((a, b) => b.votes - a.votes)
 
   return (
     <section className="py-16 md:py-24 px-4 md:px-8 lg:px-16">
@@ -213,10 +271,14 @@ export function EventsSection() {
         <p className="text-center py-16 text-muted-foreground">Loading events…</p>
       ) : error ? (
         <p className="text-center py-16 text-destructive">{error}</p>
-      ) : filteredEvents.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10">
-          {filteredEvents.map((event) => (
-            <EventCard key={event.id} {...event} />
+      ) : sortedEvents.length > 0 ? (
+        <div className="grid grid-cols-1 items-start gap-8 overflow-visible md:grid-cols-2 md:gap-10 lg:grid-cols-3 [&>article]:min-h-0 [&>article]:overflow-visible">
+          {sortedEvents.map((event) => (
+            <EventCard
+              key={event.id}
+              {...event}
+              onVotesChange={handleVotesChange}
+            />
           ))}
         </div>
       ) : (
