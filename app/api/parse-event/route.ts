@@ -135,7 +135,10 @@ export async function POST(request: Request) {
 
   let parsed: ParsedEvent
   try {
-    const clean = raw.replace(/```json|```/g, "").replace(/\\n/g, " ").trim()
+    let clean = raw.replace(/```json|```/g, "").trim()
+    clean = clean.replace(/:\s*"((?:[^"\\]|\\.)*)"/g, (match) =>
+      match.replace(/\n/g, " ").replace(/\r/g, "")
+    )
     parsed = JSON.parse(clean) as ParsedEvent
   } catch {
     return NextResponse.json(
