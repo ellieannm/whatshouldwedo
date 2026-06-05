@@ -142,7 +142,15 @@ export async function POST(request: Request) {
         return ''
       })
       .trim()
-    parsed = JSON.parse(clean) as ParsedEvent
+    try {
+      parsed = JSON.parse(clean) as ParsedEvent
+    } catch {
+      // Groq sometimes returns pretty-printed JSON with literal \n in strings
+      // Use a more aggressive approach: extract just the JSON object
+      const jsonMatch = clean.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) throw new Error("No JSON object found")
+      parsed = JSON.parse(jsonMatch[0]) as ParsedEvent
+    }
   } catch {
     return NextResponse.json(
       { error: "Failed to parse Groq response as JSON", raw },
