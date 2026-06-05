@@ -158,23 +158,28 @@ export async function POST(request: Request) {
     )
   }
 
-  await supabaseAdmin.from("events").insert({
-    title: (parsed.title || "").trim(),
+  const insertData: Record<string, unknown> = {
+    title: (parsed.title || "Untitled").trim(),
     description: (parsed.description || "").trim(),
-    start_datetime: parsed.start_datetime?.trim() || null,
-    end_datetime: parsed.end_datetime?.trim() || parsed.start_datetime?.trim() || null,
     venue_name: (parsed.venue_name || "").trim(),
     venue_suburb: (parsed.venue_suburb || "").trim(),
     category: (parsed.category || "Community Submission").trim(),
     vibes: Array.isArray(parsed.vibes) ? parsed.vibes : [],
     price_range: "",
     image_url: (parsed.image_url || "").trim(),
-    source_url: (parsed.source_url || body.source_url || "").trim(),
+    source_url: (parsed.source_url || (body as ParseEventPayload).source_url || "").trim(),
     source_name: "iOS Shortcut",
     status: "pending",
     is_featured: false,
     is_curated_pick: false,
-  })
+  }
+  if (parsed.start_datetime?.trim()) insertData.start_datetime = parsed.start_datetime.trim()
+  if (parsed.end_datetime?.trim()) insertData.end_datetime = parsed.end_datetime.trim()
+
+  const { error: insertError } = await supabaseAdmin.from("events").insert(insertData)
+  if (insertError) {
+    console.error("[parse-event] insert error:", insertError.message)
+  }
 
   return NextResponse.json({ event: parsed })
 }
