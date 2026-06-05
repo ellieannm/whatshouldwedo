@@ -161,8 +161,8 @@ export async function POST(request: Request) {
   await supabaseAdmin.from("events").insert({
     title: (parsed.title || "").trim(),
     description: (parsed.description || "").trim(),
-    start_datetime: (parsed.start_datetime || "").trim(),
-    end_datetime: (parsed.end_datetime || "").trim() || (parsed.start_datetime || "").trim(),
+    start_datetime: parsed.start_datetime?.trim() || null,
+    end_datetime: parsed.end_datetime?.trim() || parsed.start_datetime?.trim() || null,
     venue_name: (parsed.venue_name || "").trim(),
     venue_suburb: (parsed.venue_suburb || "").trim(),
     category: (parsed.category || "Community Submission").trim(),
