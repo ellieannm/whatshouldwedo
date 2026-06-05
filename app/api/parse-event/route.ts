@@ -35,6 +35,7 @@ type ParseEventPayload = {
   text?: string
   imageBase64?: string
   imageMediaType?: string
+  source_url?: string
 }
 
 type ParsedEvent = {
@@ -57,11 +58,35 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as ParseEventPayload | null
-  if (!body || (!body.text?.trim() && !body.imageBase64)) {
+  if (!body || (!body.text?.trim() && !body.imageBase64 && !body.source_url?.trim())) {
     return NextResponse.json(
-      { error: "Provide at least one of: text, imageBase64" },
+      { error: "Provide at least one of: text, imageBase64, source_url" },
       { status: 400 }
     )
+  }
+
+  if (!body.text?.trim() && !body.imageBase64 && body.source_url?.trim()) {
+    const { error } = await supabaseAdmin.from("events").insert({
+      title: "Untitled (from shortcut)",
+      description: "",
+      start_datetime: "",
+      end_datetime: "",
+      venue_name: "",
+      venue_suburb: "",
+      category: "Community Submission",
+      vibes: [],
+      price_range: "",
+      image_url: "",
+      source_url: body.source_url.trim(),
+      source_name: "iOS Shortcut",
+      status: "pending",
+      is_featured: false,
+      is_curated_pick: false,
+    })
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return NextResponse.json({ success: true, message: "Saved as pending for manual review" })
   }
 
   const userContent: string[] = []
@@ -110,7 +135,7 @@ export async function POST(request: Request) {
 
   let parsed: ParsedEvent
   try {
-    const clean = raw.replace(/```json|```/g, "").trim()
+    const clean = raw.replace(/```json|```/g, "").replace(/\\n/g, " ").trim()
     parsed = JSON.parse(clean) as ParsedEvent
   } catch {
     return NextResponse.json(
