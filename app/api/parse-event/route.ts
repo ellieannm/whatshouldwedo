@@ -3,7 +3,6 @@ import { NextResponse } from "next/server"
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 const MODEL = "llama-3.3-70b-versatile"
-const APIFY_ACTOR_ID = "apify~instagram-scraper"
 
 const SYSTEM_PROMPT = `You are an event data extractor for WSWD, a curated Melbourne events guide.
 
@@ -63,31 +62,15 @@ type ParsedEvent = {
   vibes: string[]
 }
 
-type ApifyResult = {
-  caption?: string
-  displayUrl?: string
-  images?: string[]
-  url?: string
-  locationName?: string
-  ownerUsername?: string
-  ownerFullName?: string
-  taggedUsers?: Array<{ full_name: string; username: string }>
-  childPosts?: Array<{
-    displayUrl?: string
-    taggedUsers?: Array<{ full_name: string; username: string }>
-  }>
-}
-
-async function fetchInstagramData(instagramUrl: string): Promise<ApifyResult | null> {
+async function startApifyJob(instagramUrl: string): Promise<boolean> {
   const apifyToken = process.env.APIFY_API_TOKEN
   if (!apifyToken) {
     console.error("[parse-event] Missing APIFY_API_TOKEN")
-    return null
+    return false
   }
-
-  // Start Apify run
+  const webhookUrl = `https://whatshouldwedo-gamma.vercel.app/api/apify-webhook`
   const runResponse = await fetch(
-    `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs?token=${apifyToken}`,
+    `https://api.apify.com/v2/acts/apify~instagram-scraper/runs?token=${apifyToken}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -95,48 +78,20 @@ async function fetchInstagramData(instagramUrl: string): Promise<ApifyResult | n
         directUrls: [instagramUrl],
         resultsType: "posts",
         resultsLimit: 1,
+        webhooks: [
+          {
+            eventTypes: ["ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED"],
+            requestUrl: webhookUrl,
+          },
+        ],
       }),
     }
   )
-
   if (!runResponse.ok) {
-    console.error("[parse-event] Apify run failed:", await runResponse.text())
-    return null
+    console.error("[parse-event] Apify start failed:", await runResponse.text())
+    return false
   }
-
-  const runData = (await runResponse.json()) as { data?: { id?: string; defaultDatasetId?: string } }
-  const datasetId = runData.data?.defaultDatasetId
-  const runId = runData.data?.id
-
-  if (!datasetId || !runId) {
-    console.error("[parse-event] No dataset ID from Apify")
-    return null
-  }
-
-  // Poll for completion (max 30 seconds)
-  for (let i = 0; i < 15; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-
-    const statusResponse = await fetch(
-      `https://api.apify.com/v2/actor-runs/${runId}?token=${apifyToken}`
-    )
-    const statusData = (await statusResponse.json()) as { data?: { status?: string } }
-    const status = statusData.data?.status
-
-    if (status === "SUCCEEDED") break
-    if (status === "FAILED" || status === "ABORTED") {
-      console.error("[parse-event] Apify run failed with status:", status)
-      return null
-    }
-  }
-
-  // Fetch results
-  const resultsResponse = await fetch(
-    `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}`
-  )
-  const results = (await resultsResponse.json()) as ApifyResult[]
-
-  return results?.[0] || null
+  return true
 }
 
 async function parseWithGroq(
@@ -263,11 +218,11 @@ export async function POST(request: Request) {
   const sourceUrl = body.source_url?.trim() || ""
   const isInstagramUrl = sourceUrl.includes("instagram.com")
 
-  // Instagram URL — use Apify to get real content
+  // Instagram URL — queue Apify job; webhook handles parse + save
   if (isInstagramUrl && sourceUrl) {
-    const igData = await fetchInstagramData(sourceUrl)
+    const started = await startApifyJob(sourceUrl)
 
-    if (!igData) {
+    if (!started) {
       // Fallback: save bare pending event with just the URL
       await supabaseAdmin.from("events").insert({
         title: "Untitled (Instagram)",
@@ -291,23 +246,10 @@ export async function POST(request: Request) {
       })
     }
 
-    const caption = igData.caption || ""
-    const images = igData.images || (igData.displayUrl ? [igData.displayUrl] : [])
-    const taggedUsers = igData.taggedUsers || []
-    const childPosts = igData.childPosts || []
-
-    try {
-      const events = await parseWithGroq(caption, images, taggedUsers, childPosts, sourceUrl)
-      await saveEvents(events, sourceUrl)
-      return NextResponse.json({
-        success: true,
-        count: events.length,
-        events,
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return NextResponse.json({ error: message }, { status: 502 })
-    }
+    return NextResponse.json({
+      success: true,
+      message: "Instagram post queued for processing",
+    })
   }
 
   // Text/image input — direct Groq parse (admin Parse Event tab)
